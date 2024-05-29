@@ -1,0 +1,118 @@
+---
+title: "Visualise_staff_Survey"
+author: "Marianne van der Vaart"
+date: "2024-05-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(ggplot2)
+library(tidyverse)
+library(hash)
+library(cowplot)
+library(data.table)
+library(plotly)
+library(ggpubr)
+library(tidyselect)
+library(pracma)
+
+genders <- c("Male","Female")
+role <- "all"
+StaffSurveyTable <- list()
+
+```
+
+This script plots data from the staff survey by year. You will need one excel file per year, where each tab contains the answers for a given gender and role. Example (fake) data is provided in "2021_Staff_Survey_Example.xlsx" and "2023_Staff_Survey_Example.xlsx". Additionally, you will need an excel file which contains the questions you want to plot. The script will look for the question as asked in the first column of this spreadsheet. If the questions change between different years, you must add the alternative question in the second column. An example is provided in "Core_Questions_Example.xlsx". The spreadsheets do not contain real data. 
+
+```{r 2021 & 2023}
+years <- c("2021","2023")
+
+for (iYear in 1:length(years))
+  {year <- years[iYear]
+
+  # load appropriate file
+  filename <- paste0(year, "_Staff_Survey_Example.xlsx")
+  
+  # loop through genders
+  for (iGender in 1:length(genders))
+    {gender <- genders[iGender]
+    TempTable <- read_xlsx(filename, sheet = paste(gender, role))
+    
+    TempTable <- TempTable[!is.na(TempTable[,2]),] # remove empty rows
+    TempTable <- TempTable[,1:7] # select relevant columns
+    TempTable <- mutate(TempTable, year = year) # add year as a variable
+    TempTable <- mutate(TempTable, gender = gender) # add gender as a variable
+    TempTable <- mutate(TempTable, role = role) # add role as a variable 
+    StaffSurveyTable <- rbind(StaffSurveyTable, TempTable)} # store 
+  }
+
+StaffSurveyTable <- melt(setDT(StaffSurveyTable), id.vars = c("Theme","Question","Population","Percentage Score", "year","gender","role"), variable.name = "Answer") # convert to long format
+StaffSurveyTable <- rename(StaffSurveyTable, Percentage = value) # rename the percentage variable
+ 
+```
+
+
+```{r Bind}
+
+# Organise for plotting
+StaffSurveyTable$Percentage <- as.numeric(StaffSurveyTable$Percentage) * 100  
+StaffSurveyTable$Answer <- factor(StaffSurveyTable$Answer, levels = c("Negative","Neutral","Positive"))
+StaffSurveyTable$gender <- factor(StaffSurveyTable$gender, levels = genders)
+```
+
+
+```{r All Qs}
+years <- c("2021","2023")
+cols <- c("#80b1d3","#fb8072")
+p <- list()
+
+# Load in the relevant questions
+questions <- as.data.frame(read_xlsx("Core_questions_Example.xlsx"))
+
+# Specify which percentages to plot
+plottextfor <- c("Positive","Negative")
+
+# Loop through questions
+for (iQuestion in 1:length(questions$Questions))
+{question <- questions[iQuestion,1:2] # select question
+  data <- StaffSurveyTable
+
+  # Questions may change year by year, so find the 2023 question or its alternative
+  data1 = data[grepl(question$Questions2023, data$Question, fixed = TRUE)] # grab relevant question from data frame (2023 questions)
+  data2 = data[grepl(question$Alternative2021, data$Question, fixed = TRUE)] # grab relevant question from data frame (alternative - 2021 questions)
+  data = rbind(data1, data2)
+  
+  # Loop through years
+  for (iYear in 1:length(years))
+    {
+    x1 <- data[data$year == years[iYear],] # select relevant data
+    x1 <- x1[!is.na(x1$Percentage)] # remove missing data
+    x1 <- group_by(x1, gender) # group by gender
+    x1 <- mutate(x1, label_y_pos = cumsum(Percentage)) # sum the percentages to find where to plot them
+    x1 <- mutate(x1, label_y = round(Percentage,0)) # round them
+    x1$label_y <- ifelse(x1$Answer %in% plottextfor, x1$label_y, " ")
+    x1$gender_n <- paste0(x1$gender, ", n = ", x1$Population)
+    
+    # create the plot
+  p[[iYear]] <- ggplot(x1, aes(x = gender, y = Percentage)) +geom_col(aes(fill = interaction(gender,Answer)), width = 0.7)+ geom_text(aes(y = label_y_pos, label = label_y,hjust = 1.5), colour = "white") + coord_flip() + ggtitle(paste(years[iYear], x1$Question[1]))+ theme(plot.title = element_text(size = 9.5, face = "bold"), legend.title = element_blank())+ scale_fill_manual(values=c("#D7E3EC","#FFE4E1","#B1C7D8","#FFC1BA","#80b1d3","#fb8072"))+theme(legend.position = "bottom")+labs(x = "Gender", colour = "Answer")+ theme(axis.title = element_text(size = 9), axis.text.y = element_text(size = 8), legend.text = element_text(size = 8))
+  }
+  
+# Remove the labels from the top plot
+p[[1]] <- p[[1]] + theme(axis.title.x = element_blank(),axis.text.x = element_blank(),axis.ticks.x = element_blank(), legend.position = "none")
+
+# Combine the plots
+pfull <- plot_grid(p[[1]],p[[2]], nrow=2,  rel_heights = c(5,8))
+
+# Save 
+print(pfull)
+save_plot(paste0(question$Questions2023,"_",role,".png"), pfull, base_width = 9, base_height=4, bg='white')
+
+}
+
+```
+          
+
+

@@ -1,0 +1,76 @@
+---
+title: "Visualise_grant_Success"
+author: "Marianne van der Vaart"
+date: "2024-05-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(ggplot2)
+library(tidyverse)
+library(hash)
+library(cowplot)
+```
+
+Fake example data is given in "PI_Success_Example.xlsx". Every line in this spreadsheet should represent the successful and submitted grants for a single PI in a given financial year. The provided excel sheet does not contain real data.  
+
+```{r Grant_success}
+
+# Read table & transform into data frame
+TableSuccess <- read_xlsx("PI_success_Example.xlsx")
+TableSuccess = as.data.frame(TableSuccess);
+print(TableSuccess)
+
+# Rejig data
+newTable <- data.frame();
+uniqueFinancialYears <- sort(unique(TableSuccess$`Financial Year (Success PI)`)); # unique financial years
+for (year in uniqueFinancialYears)
+{  
+  # select number of approved grants and legal sex of applier from relevant rows
+  numApproved <- TableSuccess$`Approved *`[TableSuccess$`Financial Year (Success PI)` == year];
+  sexOfApproved <- TableSuccess$`Legal sex (group)`[TableSuccess$`Financial Year (Success PI)` == year];
+  
+  # sum the approved grants by legal sex
+  numApprovedMale <- sum(numApproved[sexOfApproved == "Male"],na.rm = TRUE)
+  numApprovedFemale <- sum(numApproved[sexOfApproved == "Female"],na.rm = TRUE)
+  numTotal <- sum(numApprovedMale, numApprovedFemale)
+  
+  # convert to percentage of total
+  p_approvedMale <- numApprovedMale / numTotal;
+  p_approvedFemale <- numApprovedFemale / numTotal; 
+  
+  # merge into new table format for saving / plotting
+ yearStats <- data.frame(financialYear = rep(year,each = 2),sex = c("Female","Male"), volume = c(numApprovedFemale,numApprovedMale), p_approved = c(p_approvedFemale,p_approvedMale))
+  newTable <- rbind(newTable,yearStats)}
+
+# print
+print(newTable)
+
+  
+```
+
+```{r Grant_Success_Plot}
+
+# Convert legal sex variable into factor
+newTable$sex <- factor(newTable$sex, levels = c("Male","Female"))
+
+# Create plot
+grantSuccessPlot <- ggplot(data = newTable, aes(x = financialYear, y = p_approved, fill = sex))+
+    geom_bar(position = position_fill(),stat = "identity") +
+    geom_line(data = newTable[which(newTable$sex=="Female"),] ,
+              aes(x = financialYear, y = p_approved, group = sex), colour="#6699cc", linewidth = 1)+
+    labs(y="Percent", x="Year", colour=NULL, title="Percentage of approved grants", fill=NULL)+
+    geom_hline(yintercept = .5, linetype = 2, colour = "grey60", linewidth = 1)+
+    scale_fill_manual(values=c("#80b1d3","#fb8072"))+
+    scale_y_continuous(labels = scales::percent,limits=c(NA,1))
+
+grantSuccessPlot <- grantSuccessPlot + theme_classic(base_size=15) + 
+  theme(axis.text.x = element_text(angle = 45,  hjust=1))
+
+# show & save
+show(grantSuccessPlot)
+save_plot(paste("Grant_Success.png"), grantSuccessPlot, base_width = 9, base_height=4, bg='white')
+
+```
