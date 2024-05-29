@@ -1,4 +1,4 @@
-Scripts to visualise grant data and staff survey data. 
+Scripts to visualise grant data and staff survey data. Example dummy data is given in the individual folders. 
 
 Software: 
 R Core Team (2023). _R: A Language and Environment for Statistical Computing_. R Foundation for Statistical Computing, Vienna, Austria. <https://www.R-project.org/>. R version 4.3.2 (2023-10-31).
